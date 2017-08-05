@@ -32,3 +32,60 @@ def parse_camera_info(camera_file_contents, image_id):
             infos['camera'] += ' ' + target_line[ii + 7]
     parsed = True
     return parsed, infos
+
+def split_lat_long(coords):
+    """This function assumes lat and long are coming in pair and only one pair.
+    """
+    upper_coords = coords.upper().rstrip()
+    dir_index = np.array([0,0,0,0])
+    directions = ['N', 'S', 'E', 'W']
+    for ii, direction in enumerate(directions):
+        dir_index[ii] = upper_coords.find(direction)
+    mid_idx = np.argsort(dir_index)[len(dir_index)//2]
+    mid_char = directions[mid_idx]
+    coord1 = coords[0:dir_index[mid_idx]+1]
+    coord2 = coords.split(mid_char)[-1]
+    result = {}
+    if mid_char in ['N', 'S']:
+        result['lat'] = coord1
+        result['long'] = coord2
+    else:
+        result['lat'] = coord2
+        result['long'] = coord1
+    return result
+
+def coord_str2deg(coord):
+    # assume there is only one coordinate char
+    # NOTE this function assumes the lat and long are in the right format
+    upper_coord = coord.upper().rstrip()
+    if upper_coord.endswith('N'):
+        sign = 1
+        direction = 'N'
+    elif upper_coord.endswith('S'):
+        sign = -1
+        direction = 'S'
+    elif upper_coord.endswith('W'):
+        sign = -1
+        direction = 'W'
+    elif upper_coord.endswith('E'):
+        sign = 1
+        direction = 'E'
+    else:
+        pass
+
+    coord_split = coord.split('\xc2\xb0')
+    deg = float(coord_split[0])
+    coord_split = coord_split[1].split("\'")
+    minutes = float(coord_split[0])
+    coord_split = coord_split[1].split("\"%s" % direction)
+    seconds = float(coord_split[0])
+    total_deg = (deg + minutes / 60.0 + seconds / 3600.0) * sign
+    return total_deg
+
+def translate_coords(coords):
+    ll = split_lat_long(coords)
+    LAT = ll['lat']
+    LONG = ll['long']
+    n_lat = coord_str2deg(LAT)
+    n_long = coord_str2deg(LONG)
+    return n_lat, n_long

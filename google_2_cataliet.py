@@ -24,6 +24,7 @@ class SG2Image(object):
         """
         if image_full_id != None:
             self.set_id(image_full_id)
+        self.nadir_point = self.set_nadir_point()
 
     def set_id(self, image_full_id):
         self.image_full_id = image_full_id
@@ -34,6 +35,8 @@ class SG2Image(object):
 
     def add_info(self, info):
         for key, v in list(info.items()):
+            if key == "center_point":
+                v = g2cu.translate_coords(v)
             setattr(self, key, v)
 
     def get_camera_info(self, camera_file_contents=None, camera_dir=None):
@@ -56,6 +59,9 @@ class SG2Image(object):
         for key, v in list(c_info.items()):
             setattr(self, key, v)
 
+    def set_nadir_point(self):
+        return (0.0, 0.0)
+
 class GoogleSheetCSV(object):
     """This is a class for processing the Google Sheet CSV files
     """
@@ -65,7 +71,11 @@ class GoogleSheetCSV(object):
         self.content_list, self.name_field = self.read_csv_file(self.filename)
         self.image_ids = self.content_list[:, 1]
         self.missions, self.missions_list = self.get_missions(self.image_ids)
-
+        self.name_field_map = {'center_point': 'Center Point',
+                               'features': 'Features',
+                               'geographic_name':'Geographic Name',
+                               'cloud_percentage': 'Cloud Percentage',
+                               'ho_lo': 'HO / LO'}
     def read_csv_file(self, csv_file):
         name_field = {}
         with open(csv_file, 'r') as f:
@@ -93,6 +103,13 @@ class GoogleSheetCSV(object):
         missions.remove('Image ID')
         return missions, np.array(missions_list)
 
+    def get_column_idx(self, field_name):
+        if field_name not in list(self.name_field.keys()):
+            fn = self.name_field_map[field_name]
+            return self.name_field[fn]
+        else:
+            return self.name_field[field_name]
+
 class CataliteFiles(object):
     """This is a class for catelite output file.
     """
@@ -100,7 +117,70 @@ class CataliteFiles(object):
         self.filename = filename
         self.sheet_cls = google_sheet_cls
         self.catelite_path = catelite_path
+        self.required_info = ['mission_id', 'separation_sign', 'image_id', \
+                              'date', 'time', 'nadir_point', 'center_point', \
+                              'features', 'geographic_name', 'cloud_percentage',\
+                              'focal_length']
+        self.from_input = ['center_point', 'features', 'geographic_name', \
+                           'cloud_percentage', 'ho_lo']
         self.image_clses = self.get_images(self.sheet_cls, self.catelite_path)
+        self.geo_names = self.load_geo_names(self.catelite_path)
+        self.geo_coords = None
+        self.catalite_params = self.load_catalite_parameters(self.catelite_path)
+
+    def load_geo_names(self, catelite_path):
+        f = open(os.path.join(catelite_path, 'GeoNames.txt'))
+        geo_name = []
+        for l in f.readlines():
+            geo_name.append(l.strip())
+        f.close()
+        return geo_name
+
+    def load_geo_coords(self, catelite_path):
+        geo_coor = np.genfromtxt(os.path.join(catelite_path, 'GeonCoords.tsv'), \
+                                 dtype=str)
+        self.geo_coords = geo_coor
+
+    def load_catalite_parameters(self, catelite_path):
+        f = open(os.path.join(catelite_path, 'CatalogParameters.txt'))
+        cp = {}
+        for l in f.readlines():
+            if l.startswith('#') or l=="":
+                continue
+            l = l.strip()
+            lf = l.split(':')
+            if len(lf) == 1:
+                lf = lf[0].split("=")
+                if lf[0] == "":
+                    continue
+            cp[lf[0]] = lf[1]
+        f.close()
+        return cp
+
+    def get_rules(self, rule_name):
+        rule = self.catalite_params[rule_name]
+        l = rule.split('|')
+        if len(l) < 2:
+            l = l[0]
+        return l
+
+    def get_geoname_from_geocoord(self, Lat, Long, tol=0.5):
+        if self.geo_coords is None:
+            print("Loading geographic coordinates. It may take a minute.")
+            self.load_geo_coords(self.catelite_path)
+        lats = self.geo_coords[:,0].astype(float)
+        longs = self.geo_coords[:,1].astype(float)
+        lat_diff = np.abs(lats-Lat)
+        lat_diff_min = lat_diff.min()
+        lat_idx = np.where(lat_diff == lat_diff_min)[0]
+        # search closest long within cloest lat idxs.
+        long_diff = np.abs(longs[lat_idx]-Long)
+        long_diff_min = long_diff.min()
+        long_idx = np.where(long_diff == long_diff_min)[0]
+        if lat_diff_min > tol or long_diff_min > tol:
+            raise ValueError("Can not map Lat %.2f Long %.2f " % (Lat, Long) )
+        result_idx = lat_idx[long_idx]
+        return self.geo_coords[result_idx,2][0]
 
     def get_images(self, sheet_cls, catelite_path):
         images_clses = []
@@ -119,8 +199,72 @@ class CataliteFiles(object):
             camera_file_name = mission + "camera.txt"
             camera_file = os.path.join(camera_file_path, camera_file_name)
             camera_file_contents = np.genfromtxt(camera_file, dtype='str')
-            print i
             for idx in msk:
                 images_clses[idx].get_camera_info(camera_file_contents)
-                # TODO Get input information. 
+                input_info = {}
+                for name in self.from_input:
+                    col_idx = sheet_cls.get_column_idx(name)
+                    input_info[name] = sheet_cls.content_list[idx, col_idx]
+                images_clses[idx].add_info(input_info)
         return images_clses
+
+    def output_line(self, img_cls):
+        outline = ""
+        # ids
+        outline += img_cls.mission_id + '\t'
+        outline += img_cls.separation_sign + '\t'
+        outline += img_cls.image_id + '\t\t'
+        # date and time
+        date = img_cls.date.replace(':', '\t')
+        outline += date + '\t'
+        time = img_cls.time.replace(':', '\t')
+        outline += time + '\t'
+        # Nadir Point
+        nadir = img_cls.nadir_point
+        outline += "%.2f" % nadir[0] + '\t' + "%.2f" % nadir[1] + '\t'
+        # center_point
+        center_point = img_cls.center_point
+        outline += "%.2f" % center_point[0] + '\t' + "%.2f" % center_point[1] + '\t'
+        # geographic_name
+        geo_name = img_cls.geographic_name.replace(" ", '')
+        if geo_name.upper() in self.geo_names:
+            outline += geo_name.upper() + "\t"
+        else:
+            print("Can not find Geographic name '%s' in the list." % geo_name)
+            print("Search Geographic name using center_point")
+            geo_name = self.get_geoname_from_geocoord(img_cls.center_point[0], \
+                                                      img_cls.center_point[1])
+            outline += geo_name + "\t"
+        #features
+        features = img_cls.features
+        if features is '':
+            outline += 'NOT SPECIFIED\t'
+        else:
+            outline += features.upper() + '\t'
+        #Cloud Percentage
+        cp = img_cls.cloud_percentage.replace('%', '')
+        outline += cp + '\t'
+        # focal_length
+        fl = img_cls.focal_length
+        outline += fl + '\t'
+        # Ho/Lo
+        holo = img_cls.ho_lo
+        outline += holo + '\t'
+        #Camera
+        camera = ""
+        film_type = ""
+        camera_rule = self.get_rules('CameraAndFilmRules')
+        for cr in camera_rule:
+            crf = cr.split(',')
+            if crf[0] in img_cls.camera:
+                camera = crf[1]
+                film_type = crf[2]
+                break
+            else:
+                continue
+        if camera == "" or film_type == "":
+            raise ValueError("Can not match camera '%s'." % img_cls.camera)
+        outline += camera + '\t' + film_type + '\t'
+        # TODO get azimuth, Evelation, altitude look direction 
+
+        return outline
