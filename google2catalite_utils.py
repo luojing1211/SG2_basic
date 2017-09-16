@@ -1,6 +1,8 @@
 """This is a utility functions file for google2sg2 script
 """
 import numpy as np
+from image_info_from_url import SG2ImageWebInfo
+
 
 def parse_camera_info(camera_file_contents, image_id):
     """This is fast way to get camera informations from the camera_file.
@@ -89,3 +91,12 @@ def translate_coords(coords):
     n_lat = coord_str2deg(LAT)
     n_long = coord_str2deg(LONG)
     return n_lat, n_long
+
+def get_info_from_url(img_id):
+    image = SG2ImageWebInfo(img_id)
+    try:
+        image.get_image_info()
+        image.translate_info_as_data()
+    except:
+        raise RuntimeError('Image information is not correctly parsed from website.')
+    return image

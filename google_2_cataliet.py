@@ -22,9 +22,18 @@ class SG2Image(object):
         **infos: dict
             Input information.
         """
+        self.good_image = False
         if image_full_id != None:
-            self.set_id(image_full_id)
-        self.nadir_point = self.set_nadir_point()
+            try:
+                self.set_id(image_full_id)
+                self.web_info = self.get_web_info()
+                self.nadir_point = self.get_nadir_point()
+                self.sun_azimuth = self.web_info.sun_azimuth
+                self.sun_elevation = self.web_info.sun_elevation
+                self.spacecraft_alt_mile = self.web_info.spacecraft_alt_mile
+                self.good_image = True
+            except:
+                pass
 
     def set_id(self, image_full_id):
         self.image_full_id = image_full_id
@@ -58,9 +67,35 @@ class SG2Image(object):
                              % self.image_full_id)
         for key, v in list(c_info.items()):
             setattr(self, key, v)
+    def get_web_info(self):
+        im_info = g2cu.get_info_from_url(self.image_full_id)
+        return im_info
 
-    def set_nadir_point(self):
-        return (0.0, 0.0)
+    def get_nadir_point(self):
+        # TODO Duplicate code.
+        nd = self.web_info.nadir
+        final_nd = np.zeros(2)
+        for ii, coord in enumerate(nd):
+            upper_coord = coord.upper().rstrip()
+            if upper_coord.endswith('N'):
+                sign = 1
+                direction = 'N'
+            elif upper_coord.endswith('S'):
+                sign = -1
+                direction = 'S'
+            elif upper_coord.endswith('W'):
+                sign = -1
+                direction = 'W'
+            elif upper_coord.endswith('E'):
+                sign = 1
+                direction = 'E'
+            else:
+                pass
+
+            deg = coord.split(' ')[0]
+            final_deg = float(deg) * sign
+            final_nd[ii] = final_deg
+        return final_nd
 
 class GoogleSheetCSV(object):
     """This is a class for processing the Google Sheet CSV files
@@ -185,13 +220,13 @@ class CataliteFiles(object):
     def get_images(self, sheet_cls, catelite_path):
         images_clses = []
         for img_id in sheet_cls.content_list[:, 1]:
-            try:
-                images_clses.append(SG2Image(img_id))
-            except:
+            img = SG2Image(img_id)
+            if not img.good_image:
                 if img_id != "" and img_id != 'Image ID':
-                    print("Image ID '%s' is not in the right format." % img_id)
-                images_clses.append(SG2Image())
-                continue
+                    print("Can not form image for '%s'. Need to "
+                          "checkout the ID format or net connection. " % img_id)
+            images_clses.append(img)
+
         for mission in sheet_cls.missions:
             msk = np.where(sheet_cls.missions_list == mission)[0]
             camera_dir = os.path.join(catelite_path, 'camera')
@@ -265,6 +300,24 @@ class CataliteFiles(object):
         if camera == "" or film_type == "":
             raise ValueError("Can not match camera '%s'." % img_cls.camera)
         outline += camera + '\t' + film_type + '\t'
-        # TODO get azimuth, Evelation, altitude look direction 
+        # TODO Need azimuth, Evelation, altitude look direction
 
+        Azimuth = img_cls.sun_azimuth
+        Elevation = img_cls.sun_elevation
+        Altitude = img_cls.spacecraft_alt_mile
+        outline += "%d\t%d\t%d\t" % (Azimuth, Elevation, Altitude)
+        # Look direction
+        diff = nadir - center_point
+        if diff[0] < 0.0:
+            dir_NS = 'N'
+        else:
+            dir_NS = 'S'
+
+        if diff[1] < 0.0:
+            dir_EW = 'E'
+        else:
+            dir_EW = 'W'
+        # TODO Add direction check
+        direction = dir_NS + dir_EW
+        outline += direction
         return outline
