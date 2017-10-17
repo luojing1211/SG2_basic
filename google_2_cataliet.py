@@ -111,6 +111,7 @@ class GoogleSheetCSV(object):
                                'geographic_name':'Geographic Name',
                                'cloud_percentage': 'Cloud Percentage',
                                'ho_lo': 'HO / LO'}
+        self.bad_imags = []
     def read_csv_file(self, csv_file):
         name_field = {}
         with open(csv_file, 'r') as f:
@@ -134,8 +135,10 @@ class GoogleSheetCSV(object):
             except:
                 missions_list.append('')
         missions = set(missions_list)
-        missions.remove('')
-        missions.remove('Image ID')
+        if '' in missions:
+            missions.remove('')
+        if 'Image ID' in missions:
+            missions.remove('Image ID')
         return missions, np.array(missions_list)
 
     def get_column_idx(self, field_name):
@@ -218,6 +221,7 @@ class CataliteFiles(object):
         return self.geo_coords[result_idx,2][0]
 
     def get_images(self, sheet_cls, catelite_path):
+
         images_clses = []
         for img_id in sheet_cls.content_list[:, 1]:
             img = SG2Image(img_id)
@@ -225,6 +229,7 @@ class CataliteFiles(object):
                 if img_id != "" and img_id != 'Image ID':
                     print("Can not form image for '%s'. Need to "
                           "checkout the ID format or net connection. " % img_id)
+                    sheet_cls.bad_imags.append(img_id)
             images_clses.append(img)
 
         for mission in sheet_cls.missions:
@@ -233,7 +238,10 @@ class CataliteFiles(object):
             camera_file_path = os.path.join(camera_dir, mission)
             camera_file_name = mission + "camera.txt"
             camera_file = os.path.join(camera_file_path, camera_file_name)
-            camera_file_contents = np.genfromtxt(camera_file, dtype='str')
+            try:
+                camera_file_contents = np.genfromtxt(camera_file, dtype='str')
+            except:
+                continue
             for idx in msk:
                 images_clses[idx].get_camera_info(camera_file_contents)
                 input_info = {}
@@ -244,6 +252,9 @@ class CataliteFiles(object):
         return images_clses
 
     def output_line(self, img_cls):
+        if not img_cls:
+            print("Image '%s' is not a valid image." % img_cls.image_full_id)
+            pass
         outline = ""
         # ids
         outline += img_cls.mission_id + '\t'
