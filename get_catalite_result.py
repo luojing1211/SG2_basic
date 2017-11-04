@@ -24,7 +24,7 @@ if __name__ == "__main__":
     issue_out =''
     for im in cf.image_clses:
         if im.good_image:
-            result_out += cf.output_line(im)
+            result_out += cf.output_line(im) +'\n'
         else:
             if im.image_full_id.startswith('Image'):
                 continue

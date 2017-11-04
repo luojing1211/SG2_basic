@@ -318,17 +318,28 @@ class CataliteFiles(object):
         Altitude = img_cls.spacecraft_alt_mile
         outline += "%d\t%d\t%d\t" % (Azimuth, Elevation, Altitude)
         # Look direction
-        diff = nadir - center_point
-        if diff[0] < 0.0:
-            dir_NS = 'N'
+        diff = center_point - nadir
+        x = diff[1]
+        y = diff[0]
+        theta = np.arctan2(y, x)
+        print theta
+        if theta >= - np.pi/8.0 and theta < np.pi/8.0:
+            view_dir = 'E'
+        elif theta >= np.pi/8.0 and theta< np.pi/8.0 * 3:
+            view_dir = 'NE'
+        elif theta >= np.pi/8.0 * 3 and theta< np.pi/8.0 * 5:
+            view_dir = 'N'
+        elif theta >= np.pi/8.0 * 5 and theta< np.pi/8.0 * 7:
+            view_dir = 'NW'
+        elif theta >= - np.pi/8.0 * 7 and theta < - np.pi/8.0 * 5:
+            view_dir = 'SW'
+        elif theta >= -np.pi/8.0 * 5 and theta < - np.pi/8.0 * 3:
+            view_dir = 'S'
+        elif theta >= -np.pi/8.0 * 3 and theta < - np.pi/8.0 :
+            view_dir = 'SE'
         else:
-            dir_NS = 'S'
+            view_dir = 'W'
 
-        if diff[1] < 0.0:
-            dir_EW = 'E'
-        else:
-            dir_EW = 'W'
-        # TODO Add direction check
-        direction = dir_NS + dir_EW
+        direction = view_dir
         outline += direction
         return outline
