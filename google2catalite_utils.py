@@ -2,7 +2,7 @@
 """
 import numpy as np
 from image_info_from_url import SG2ImageWebInfo
-
+import sys
 
 def parse_camera_info(camera_file_contents, image_id):
     """This is fast way to get camera informations from the camera_file.
@@ -96,7 +96,12 @@ def get_info_from_url(img_id):
     image = SG2ImageWebInfo(img_id)
     try:
         image.get_image_info()
+    except:
+        print sys.exc_info()
+        raise RuntimeError('Image information is not correctly parsed from website.')
+    try:
         image.translate_info_as_data()
     except:
-        raise RuntimeError('Image information is not correctly parsed from website.')
+        print sys.exc_info()
+        raise RuntimeError('Image information is not correctly translated.')
     return image

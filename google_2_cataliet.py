@@ -9,6 +9,7 @@ import os
 import google2catalite_utils as g2cu
 import csv
 import numpy as np
+import sys
 
 class SG2Image(object):
     """This is a class for sg2 image information.
@@ -23,6 +24,7 @@ class SG2Image(object):
             Input information.
         """
         self.good_image = False
+        self.error_msg = ""
         if image_full_id != None:
             try:
                 self.set_id(image_full_id)
@@ -33,10 +35,11 @@ class SG2Image(object):
                 self.spacecraft_alt_mile = self.web_info.spacecraft_alt_mile
                 self.good_image = True
             except:
-                pass
-
+                if image_full_id.replace(' ', '') != '' or not image_full_id.startswith('Image'):
+                    print "Problem image: ", image_full_id, " Error: ", sys.exc_info()
+                    self.error_msg = str(sys.exc_info())
     def set_id(self, image_full_id):
-        self.image_full_id = image_full_id
+        self.image_full_id = image_full_id.replace(' ', '')
         id_split = self.image_full_id.split('-')
         self.mission_id = id_split[0]
         self.separation_sign = id_split[1]
@@ -255,6 +258,7 @@ class CataliteFiles(object):
         if not img_cls:
             print("Image '%s' is not a valid image." % img_cls.image_full_id)
             pass
+        print "Writing output for ", img_cls.image_full_id
         outline = ""
         # ids
         outline += img_cls.mission_id + '\t'

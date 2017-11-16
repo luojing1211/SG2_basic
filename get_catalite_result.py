@@ -1,5 +1,6 @@
 from google_2_cataliet import SG2Image, GoogleSheetCSV, CataliteFiles
 import os
+import sys
 import argparse
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -24,11 +25,16 @@ if __name__ == "__main__":
     issue_out =''
     for im in cf.image_clses:
         if im.good_image:
-            result_out += cf.output_line(im) +'\n'
+            try:
+                result_out += cf.output_line(im) + '\n'
+            except:
+                issue_out += im.image_full_id + ' ' + str(sys.exc_info()) + '\n'
         else:
             if im.image_full_id.startswith('Image'):
                 continue
-            issue_out += im.image_full_id + '\n'
+            if im.image_full_id == '':
+                continue
+            issue_out += im.image_full_id + ' ' + im.error_msg + '\n'
     fout = open(outfile, 'w')
     iout = open(issue_img_file, 'w')
     fout.write(result_out)
