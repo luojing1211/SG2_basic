@@ -39,27 +39,31 @@ def split_lat_long(coords):
     """This function assumes lat and long are coming in pair and only one pair.
     """
     upper_coords = coords.upper().rstrip()
+    if upper_coords.startswith("\xc2\xa0"):
+        upper_coords = upper_coords.replace("\xc2\xa0", '')
     dir_index = np.array([0,0,0,0])
     directions = ['N', 'S', 'E', 'W']
     for ii, direction in enumerate(directions):
         dir_index[ii] = upper_coords.find(direction)
     mid_idx = np.argsort(dir_index)[len(dir_index)//2]
     mid_char = directions[mid_idx]
-    coord1 = coords[0:dir_index[mid_idx]+1]
-    coord2 = coords.split(mid_char)[-1]
+    coord1 = upper_coords[0:dir_index[mid_idx]+1]
+    coord2 = upper_coords.split(mid_char)[-1]
     result = {}
     if mid_char in ['N', 'S']:
-        result['lat'] = coord1
-        result['long'] = coord2
+        result['lat'] = coord1.replace(' ', '')
+        result['long'] = coord2.replace(' ', '')
     else:
-        result['lat'] = coord2
-        result['long'] = coord1
+        result['lat'] = coord2.replace(' ', '')
+        result['long'] = coord1.replace(' ', '')
     return result
 
 def coord_str2deg(coord):
     # assume there is only one coordinate char
     # NOTE this function assumes the lat and long are in the right format
     upper_coord = coord.upper().rstrip()
+    upper_coord = upper_coord.lstrip()
+
     if upper_coord.endswith('N'):
         sign = 1
         direction = 'N'
